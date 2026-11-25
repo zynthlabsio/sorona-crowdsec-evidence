@@ -1,0 +1,7 @@
+# diff: release v1.7.8 (official tag archive) vs audited master HEAD 8f653d0c — pkg/apiserver/middlewares/v1/jwt.go
+# '<' = v1.7.8 release, '>' = master HEAD src/
+305c305
+< 		TokenLookup:     "header: Authorization, query: token, cookie: jwt",
+---
+> 		TokenLookup:     "header: Authorization, cookie: jwt",
+# diff exit: 1 (0 = files identical)

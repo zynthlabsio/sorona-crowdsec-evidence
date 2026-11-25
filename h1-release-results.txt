@@ -1,0 +1,34 @@
+===== H1 REPLAY on official release binaries =====
+-- server binary version:
+version: v1.7.8-63227459
+Codename: alphaga
+-- login agentA (validated log-processor machine):
+   JWT acquired: eyJhbGciOiJIUzI1NiIsInR5c...
+-- control: agent JWT on GET /v1/decisions (machines are not decision readers, expect 403):
+{"message":"access forbidden"}
+HTTP 403
+-- allowlist check 203.0.113.99 (expect allowlisted:true from audit_allowlist):
+{"allowlisted":true,"reason":"203.0.113.99 from audit_allowlist"}
+== S1 control: profile path, normal IP 198.51.100.23 ==
+["4"]
+HTTP 201
+-- bouncer view of 198.51.100.23:
+[{"duration":"4h0m0s","id":4,"origin":"crowdsec","scenario":"test/manual","scope":"Ip","type":"ban","value":"198.51.100.23"}]
+== S2 control: profile path, ALLOWLISTED IP 203.0.113.99 ==
+[]
+HTTP 201
+-- bouncer view of 203.0.113.99 (expect no decision):
+null
+== S3 ATTACK: embedded decision, ALLOWLISTED IP 203.0.113.99, duration 87600h, origin spoofed as capi ==
+["5"]
+HTTP 201
+-- bouncer view of 203.0.113.99 (attack success = decision present):
+[{"duration":"87600h0m0s","id":5,"origin":"capi","scenario":"test/manual","scope":"Ip","type":"ban","value":"203.0.113.99"}]
+== S4 ATTACK: embedded decision scope=Range value=0.0.0.0/0 duration 87600h origin cscli ==
+["6"]
+HTTP 201
+-- bouncer containment check ip=198.51.100.23 after /0 decision:
+[{"duration":"4h0m0s","id":4,"origin":"crowdsec","scenario":"test/manual","scope":"Ip","type":"ban","value":"198.51.100.23"},{"duration":"87600h0m0s","id":6,"origin":"cscli","scenario":"test/manual","scope":"Range","type":"ban","value":"0.0.0.0/0"}]
+-- all decisions (bouncer, unfiltered, first 600 chars):
+[{"duration":"3h59m59s","id":4,"origin":"crowdsec","scenario":"test/manual","scope":"Ip","type":"ban","value":"198.51.100.23"},{"duration":"87599h59m59s","id":5,"origin":"capi","scenario":"test/manual","scope":"Ip","type":"ban","value":"203.0.113.99"},{"duration":"87599h59m59s","id":6,"origin":"cscli","scenario":"test/manual","scope":"Range","type":"ban","value":"0.0.0.0/0"}]
+===== END H1 release replay =====

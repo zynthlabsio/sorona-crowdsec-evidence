@@ -1,0 +1,155 @@
+VULNERABLE-CODE IDENTITY — official release v1.7.8 vs audited master HEAD 8f653d0c
+(extracted 2026-11-25T20:30:00Z; '<' ranges = v1.7.8 release tag source, '>' ranges = master HEAD src/)
+
+===== H1a: alerts.go isAllowListed early-return — release 128-131 vs master 129-132 =====
+--- release:
+	// If we have decisions, it comes from cscli that already checked the allowlist
+	if len(alert.Decisions) > 0 {
+		return false, ""
+	}
+--- master:
+	// If we have decisions, it comes from cscli that already checked the allowlist
+	if len(alert.Decisions) > 0 {
+		return false, ""
+	}
+>> IDENTICAL (release numbering = master numbering - 1 in this file)
+
+===== H1b: alerts.go CreateAlert embedded-decision branch — release 189-220 vs master 190-221 =====
+--- release:
+		// if coming from cscli, alert already has decisions
+		if len(alert.Decisions) != 0 {
+			// alert already has a decision (cscli decisions add etc.), generate uuid here
+			for _, decision := range alert.Decisions {
+				decision.UUID = uuid.NewString()
+			}
+
+			for pIdx, profile := range c.Profiles {
+				_, matched, err := profile.EvaluateProfile(alert)
+				if err != nil {
+					profile.Logger.Warningf("error while evaluating profile %s : %v", profile.Cfg.Name, err)
+
+					continue
+				}
+
+				if !matched {
+					continue
+				}
+
+				c.sendAlertToPluginChannel(alert, uint(pIdx))
+
+				if profile.Cfg.OnSuccess == "break" {
+					break
+				}
+			}
+
+			decision := alert.Decisions[0]
+			if decision.Origin != nil && *decision.Origin == types.CscliImportOrigin {
+				stopFlush = true
+			}
+
+			alertsToSave = append(alertsToSave, alert)
+--- master:
+		// if coming from cscli, alert already has decisions
+		if len(alert.Decisions) != 0 {
+			// alert already has a decision (cscli decisions add etc.), generate uuid here
+			for _, decision := range alert.Decisions {
+				decision.UUID = uuid.NewString()
+			}
+
+			for pIdx, profile := range c.Profiles {
+				_, matched, err := profile.EvaluateProfile(alert)
+				if err != nil {
+					profile.Logger.Warningf("error while evaluating profile %s : %v", profile.Cfg.Name, err)
+
+					continue
+				}
+
+				if !matched {
+					continue
+				}
+
+				c.sendAlertToPluginChannel(alert, uint(pIdx))
+
+				if profile.Cfg.OnSuccess == "break" {
+					break
+				}
+			}
+
+			decision := alert.Decisions[0]
+			if decision.Origin != nil && *decision.Origin == types.CscliImportOrigin {
+				stopFlush = true
+			}
+
+			alertsToSave = append(alertsToSave, alert)
+>> IDENTICAL
+
+===== H2: decisions.go DeleteDecisionById + DeleteDecisions — release 101-157 vs master 101-157 =====
+func (c *Controller) DeleteDecisionById(gctx *gin.Context) {
+	decisionIDStr := gctx.Param("decision_id")
+
+	decisionID, err := strconv.Atoi(decisionIDStr)
+	if err != nil {
+		gctx.JSON(http.StatusBadRequest, gin.H{"message": "decision_id must be valid integer"})
+
+		return
+	}
+
+	ctx := gctx.Request.Context()
+
+	nbDeleted, deletedFromDB, err := c.DBClient.ExpireDecisionByID(ctx, decisionID)
+	if err != nil {
+		c.HandleDBErrors(gctx, err)
+
+		return
+	}
+
+	// transform deleted decisions to be sendable to capi
+	deletedDecisions := FormatDecisions(deletedFromDB)
+
+	if c.DecisionDeleteChan != nil {
+		c.DecisionDeleteChan <- deletedDecisions
+	}
+
+	deleteDecisionResp := models.DeleteDecisionResponse{
+		NbDeleted: strconv.Itoa(nbDeleted),
+	}
+
+	gctx.JSON(http.StatusOK, deleteDecisionResp)
+}
+
+func (c *Controller) DeleteDecisions(gctx *gin.Context) {
+	ctx := gctx.Request.Context()
+
+	nbDeleted, deletedFromDB, err := c.DBClient.ExpireDecisionsWithFilter(ctx, gctx.Request.URL.Query())
+	if err != nil {
+		c.HandleDBErrors(gctx, err)
+
+		return
+	}
+
+	// transform deleted decisions to be sendable to capi
+	deletedDecisions := FormatDecisions(deletedFromDB)
+
+	if c.DecisionDeleteChan != nil {
+		c.DecisionDeleteChan <- deletedDecisions
+	}
+
+	deleteDecisionResp := models.DeleteDecisionResponse{
+		NbDeleted: strconv.Itoa(nbDeleted),
+	}
+
+	gctx.JSON(http.StatusOK, deleteDecisionResp)
+}
+
+>> IDENTICAL (same line numbers in both)
+
+===== H7: jwt.go Authorizator — release 240-242 vs master 240-242 =====
+func Authorizator(data any, c *gin.Context) bool {
+	return true
+}
+>> IDENTICAL (same line numbers in both)
+
+===== FULL-FILE DIFF SUMMARY (see sibling .diff files for full text) =====
+alerts.go: 3 hunks, all outside the vulnerable regions — :102 nil-slice init in CreateAlert prologue (adds the 1-line shift), :272-278 flush-pause mechanism in the import path. Regions 128-131 and 189-220 (release numbering) untouched by any hunk.
+decisions.go: hunks only from line 158 onward — a refactor of the bouncer decision-STREAMING helpers (writeStartupDecisions/writeDeltaDecisions -> writeDecisions/streamDecisions + stream concurrency limiter). The two DELETE handlers (101-157) are byte-identical.
+jwt.go: single 1-line difference at :305 — TokenLookup in the release additionally accepts 'query: token'. The Authorizator and all validation logic are byte-identical.

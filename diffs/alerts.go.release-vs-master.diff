@@ -1,0 +1,17 @@
+# diff: release v1.7.8 (official tag archive) vs audited master HEAD 8f653d0c — pkg/apiserver/controllers/v1/alerts.go
+# '<' = v1.7.8 release, '>' = master HEAD src/
+102c102,103
+< 	var data models.AddAlertsRequest
+---
+> 	// not "var data ...": the swagger says array, a nil slice would marshal to null
+> 	data := make(models.AddAlertsRequest, 0, len(result))
+272c273,275
+< 		c.DBClient.CanFlush = false
+---
+> 		// don't let the flush job trim the batch mid-import
+> 		resumeFlush := c.DBClient.PauseFlush()
+> 		defer resumeFlush()
+276,277d278
+< 	c.DBClient.CanFlush = true
+< 
+# diff exit: 1 (0 = files identical)
